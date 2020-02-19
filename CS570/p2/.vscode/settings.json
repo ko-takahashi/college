@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "p2.h": "c",
+        "getword.h": "c",
+        "unistd.h": "c"
+    }
+}

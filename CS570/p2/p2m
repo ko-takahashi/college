@@ -1,0 +1,747 @@
+#include "p2.h"
+/*******************************************************************************
+Megan Chua cssc0025
+Carroll CS570
+Program 4 Due Date: 11/30/2019
+References: listed in gradernotes file.
+
+p4 acts as a command line interpreter and a basic csh shell. It supports input/output redirection, backgrounding, the !! operator, cd, and running a script straight from the command line.
+*******************************************************************************/
+void sig (int signum)
+{
+
+}
+
+void prompt()
+{
+    printf("%%%d%% ", promptcount);
+}
+
+int main(int argc, char *argv[])
+{
+    int kidpid, grandpid; //variable to store the child process pid
+    char *home = getenv("HOME"); //variable used to chdir to Home with the command cd
+    char *cd = "cd"; //variable used to strcmp to newargv and see if cd is appropriate
+    int j = 0; //counter for the history for loop
+    int file; //stores the contents at argv[1] to run the script
+    cmdline = 0;
+    
+    //setup the process group and call the signal catcher
+    setpgid(0,getpid());
+    signal(SIGTERM,sig);
+    
+/*******************************************************************************
+The following if statement deals with the command line arguments. It first checks to see if argc is greater than zero to check for a command. Then, if the program is able to open the contents of argv[1], it will redirect the contents to stdin. This will set up the script to be parsed in the next part of the program and continue on with the shell.
+*******************************************************************************/    
+    if (argc > 0)
+    {
+        if((file = open(argv[1],O_RDONLY)) != -1)
+        {
+            cmdline = 1;
+            dup2(file,STDIN_FILENO);
+            close(file);
+        }
+        
+    }
+
+    for(;;)
+    {
+
+        word = newargvsize = amp = background = inCount = outCount = fileIn = fileOut = err = 0; //clear each variable back to 0 at the beginning of each loop to setup for next run
+
+/********************************
+Checks if prompt should ouput to
+terminal or if the prompt does not
+need to be called
+*********************************/
+        if (cmdline == 1)
+        {
+            noprompt = 1;        
+        }
+
+        if (bangcount == 1)
+        {
+            noprompt = 1;
+        }
+
+        if (noprompt == 0)
+        {
+            promptcount++;
+            prompt();
+        }
+
+        else
+        {
+            noprompt = 0;
+        }
+/********************************
+Calls parse and breaks when it
+encounters done, or end of file.
+*********************************/
+
+        if (parse() == -1)
+        {
+            break;  
+        }
+
+        if (newargvsize == 0)
+        {
+            continue;
+        }
+
+/********************************
+If the flag for !! was encountered,
+then push the contents of history
+into newargv and continue. The
+function parse, defines what history
+is.
+*********************************/
+        if (bangcount == 1)
+        {
+
+            for (j = 0; j <= newargvsize; j++)
+            {
+                newargv[j] = hist[j];
+            }
+            bangcount = 0;
+               
+        }
+
+/********************************
+Checks that each metacharacter
+has enough arguments. Otherwise,
+it prints an error message to stderr.
+*********************************/
+        if ((inCount == 1 || outCount == 1 || outerrCount == 1) && newargvsize <= 2)
+        {
+            fprintf(stderr, "Redirect: Not enough arguments\n");
+            noprompt = 1;
+            continue;
+        }
+
+/********************************
+Creates cases for different parse
+error messages.
+*********************************/
+        if (err != 0)
+        {
+            switch(err)
+            {
+                case 1:
+                    fprintf(stderr, "Output Redirection: > is invalid\n");
+                    noprompt = 1;
+                    continue;
+                case 2:
+                    fprintf(stderr, "Input Redirection: < is invalid\n");
+                    noprompt = 1;
+                    continue;
+                case 3:
+                    fprintf(stderr, "Stderr Redirection: >& is invalid\n");
+                    noprompt = 1;
+                    continue;
+                case 4:
+                    fprintf(stderr, "Backgrounding: & is invalid\n");
+                    noprompt = 1;
+                    continue;
+                case 5:
+                    fprintf(stderr, "Invalid syntax\n");
+                    noprompt = 1;
+                    continue;
+            }
+        }
+
+/********************************
+Deals with the cd command. Checks
+if the number of arguments is 2 and
+if newargv[0] is cd. If so, chdir
+to home. Otherwise, print an error
+message.
+*********************************/
+        if (newargvsize == 2)
+        {
+            if (strcmp(newargv[0],cd) == 0)
+            {
+            
+                if (chdir(home) == -1)
+                {
+                    perror("Directory not found");
+                    noprompt = 1;
+                    continue;
+                }
+
+                continue;
+            }
+        }
+    
+/********************************
+This deals with cd with arguments
+by checking for the number arguments
+and changing directories to newargv[1].
+*********************************/
+        if (newargvsize >= 3)
+        {
+            if (strcmp(newargv[0],cd) == 0)
+            {
+            
+                if (newargvsize >= 4)
+                {
+                    fprintf(stderr, "Too many arguments\n");
+                    noprompt = 1;
+                    continue;
+                }
+        
+
+                if (chdir(newargv[1]) == -1)
+                {
+                    perror("Directory not found");
+                    noprompt = 1;
+                    continue;
+                }
+        
+        
+        continue;
+            }
+        } //end cd
+
+/********************************
+Clear out the contents of stdin
+and stderr to ensure there are no
+repeat of outputs.
+*********************************/
+        fflush(stdout);
+        fflush(stderr);
+
+
+/***********************************************************************************************
+If it reaches this statement, then we have to fork a child in order to execute the command at newargv[0]. If the fork is successful, then check the flags for input/output redirection. In order to redirect, we open the contents at the output or input pointer (outfile/infile).
+
+If outerrCount: This detects >& to redirect both stdout and stderr. In order to do this, I open the outfile pointer with read and write access. Then I dup2 both stdout and stderr in order to do the redirection.
+
+If outcount: This detects > to do output redirection.
+
+If incount: This detects < to do input redirection.
+
+If !incount and background is true: Redirect to /dev/null
+
+After all the redirection is done, execvp newargv[0] to execute the command.
+
+If any of these fail, then they will error out with the function perror and exit codes.
+************************************************************************************************/
+        if ((kidpid=fork()) == -1)
+        {
+            perror("Cannot fork");
+            _exit(1);
+        }
+
+        if (kidpid == 0)
+        {
+            if (outerrCount == 1) //>&
+            {
+                if ((fileOut = open(outfile, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR)) == -1) //create the file with read and write permissions
+                {
+                    perror("Failed to open");
+                    _exit(1);
+                }
+
+                if (dup2(fileOut, STDOUT_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+        
+                if (dup2(fileOut,STDERR_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+
+                close(fileOut);
+
+            } //end >&
+
+            if (appendCount == 1) //>>
+            {
+                if ((fileOut = open(outfile, O_WRONLY | O_APPEND)) == -1)
+                {
+                    perror("File does not exist, or unable to open existing file");
+                    _exit(1);
+                }
+
+                if (dup2(fileOut, STDOUT_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+
+                close(fileOut);
+
+            }//end >>
+
+            if (appenderrCount == 1)//>>&
+            {
+                if ((fileOut = open(outfile, O_WRONLY | O_APPEND)) == -1)
+                {
+                    perror("File does not exist, or unable to open existing file");
+                    _exit(1);
+                }
+
+                if (dup2(fileOut, STDOUT_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+        
+                if (dup2(fileOut,STDERR_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+
+                close(fileOut);
+            
+            }//end >>&
+
+            if (outCount == 1) //>
+            {
+                if ((fileOut = open(outfile, O_CREAT | O_EXCL | O_WRONLY, S_IRUSR | S_IWUSR)) == -1)
+                {
+                    perror("Failed to open");
+                    _exit(1);
+                }
+
+                if (dup2(fileOut, STDOUT_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+
+                close(fileOut);
+            } // end >
+
+            if (inCount == 1) //<
+            {
+                if ((fileIn = open(infile, O_RDONLY)) == -1)
+                {
+                    perror("Failed to open");
+                    _exit(1);
+                }
+
+                if (dup2(fileIn, STDIN_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+
+                close(fileIn);
+            } //end <
+
+            //ensure that background jobs cannot read from terminal
+            if (infile == NULL && background == 1)
+            {
+                if ((fileIn = open("/dev/null",O_RDONLY)) == -1)
+                {
+                    perror("Failed to open");
+                    _exit(1);
+                }
+                
+                if (dup2(fileIn, STDIN_FILENO) == -1)
+                {
+                    perror("Can't redirect");
+                    _exit(1);
+                }
+            
+                close(fileIn);
+            } //end background jobs
+
+            //start piping
+            if (pipeCount > 0)
+            {
+                
+                int fd[2];
+
+                if (pipe(fd) == -1)
+                {
+                    perror("Cannot pipe");
+                    _exit(1);
+                }
+
+                fflush(stdout);
+                fflush(stderr);
+
+                if (-1 == (grandpid=fork()))
+                {
+                    perror("Cannot pipe");
+                    _exit(1);
+                }
+
+                else if (grandpid == 0)
+                {
+                    if (dup2(fd[1], STDOUT_FILENO) == -1)
+                    {
+                        perror("Cannot pipe");
+                        _exit(1);
+                    }
+
+                    close(fd[1]);
+                    close(fd[0]);
+                    execvp(newargv[0],newargv);
+                    fprintf (stderr,"%s: Command cannot execute\n", newargv[0]);
+                    _exit(9);
+                }
+    
+                else
+                {
+                    if (background!=1)
+                    {
+                        while(wait(NULL) != grandpid);
+
+                        if (dup2(fd[0], STDIN_FILENO) == -1)
+                        {
+                            perror("Cannot pipe");
+                            _exit(1);
+                        }
+
+                        close(fd[1]);
+                        close(fd[0]);
+                        execvp(newargv[pipeflag + 1],newargv + (pipeflag + 1));
+                        fprintf (stderr,"%s: Command cannot execute\n", newargv[0]);
+                        _exit(9);
+                    }  
+
+                    else
+                    {
+                        printf("%s [%d]\n", newargv[0], grandpid);
+
+                        if (dup2(fd[0], STDIN_FILENO) == -1)
+                        {
+                            perror("Cannot pipe");
+                            _exit(1);
+                        }
+
+                        close(fd[1]);
+                        close(fd[0]);
+                        execvp(newargv[pipeflag + 1],newargv + (pipeflag + 1));
+                        fprintf (stderr,"%s: Command cannot execute\n", newargv[0]);
+                        _exit(9);
+                    }
+
+                }
+ 
+            }//end pipe
+
+            else
+            {
+                execvp(newargv[0],newargv);
+                fprintf (stderr,"%s: Command cannot execute\n", newargv[0]);
+                _exit(9);
+            }
+            
+
+        } //end of fork
+/***********************************************
+If the argument does not fork, wait for the child
+to complete and also check for background process.
+Print out the pid of the child if background
+is true.
+**********************************************/        
+          else
+          {
+            if (background!=1)
+            {
+                while(wait(NULL) != kidpid);
+            }    
+
+            if (background == 1)
+            {
+                printf("%s [%d]\n", newargv[0], kidpid);
+            }
+          }  
+         
+    } //end for loop
+
+/***********************************************
+Once it reaches this point, kill the signal
+and terminate p2. Exit 0 to exit successfully.
+*********************************************/
+    killpg(getpgrp(),SIGTERM);
+    if (cmdline = 0)
+    {
+        printf("p2 terminated.\n");
+    }
+    exit(0);
+} //end of main
+
+
+int parse()
+{
+    char c[MAXSIZE]; //char storage to hold max amount of character
+    char *done = "done"; //variable to compare to newargv and see if it is the done terminator
+    char *w = c; //point w at the char storage in order to push into getword
+    int meta = 0; //counter for metacharacters in order to see when there are too many metas
+    outCount = 0; //flag for > meta
+    inCount = 0; //flag for < meta
+    pipeCount = 0;
+    pipeflag = 0;
+    commentflag = 0;
+    aftercomment = 0;
+    outerrCount = 0; //flag for >&
+    err = 0; //keeps track of which parse error code to print out
+    newargvsize = 0; //keeps track of number of arguments in newargv
+    amp = 0; //flag for & meta
+    background = 0; //flag for if we need to background the process
+    word = 0; //stores what is returned from getword
+    donecount = 0; //flag to track the done terminator
+    eofcount = 0; //flag to track the eof terminator
+    outfile = infile = NULL; //clear the redirection pointers
+   
+    for(;;)
+    {
+        word = getword(w);
+
+        //checks for multiple metacharacters in newargv; if so print an error code
+        if (meta == 1)
+        {
+            if (*w == '>' || *w == '<' || *w == '&' || *w == '|' || strcmp(w,outerrcmd) == 0)
+            {
+                err = 5;
+                meta--;
+                break;
+            }
+        }
+
+        //if > is detected, then set the flag and push the outfile pointer into w
+        if (*w == '>' && word == 1)
+        {
+            if (outCount == 1)
+            {
+                err = 1;
+                break;
+            }
+
+            outCount++;
+            w = w + word + 1;
+            outfile = w;
+            meta++;
+        }
+    
+        //if < is detected, then set the flag and push the infile pointer into w
+        else if (*w == '<' && word == 1)
+        {
+            if (inCount == 1)
+            {
+                err = 2;
+                break;
+            }
+
+            inCount++;
+            w = w + word + 1;
+            infile = w;
+            meta++;
+        }
+
+        //if >& is detected, then set the flag and push the outfile pointer into w
+        else if (strcmp(w,outerrcmd) == 0)
+        {
+            if (outerrCount == 1)
+            {
+                err = 3;
+                break;
+            }
+
+            outerrCount++;
+            w = w + word + 1;
+            outfile = w;
+            meta++;
+        }
+
+        //detect >>
+        else if (strcmp(w,appendcmd) == 0)
+        {
+            if (appendCount == 1)
+            {
+                err = 3;
+                break;
+            }
+
+            appendCount++;
+            w = w + word + 1;
+            outfile = w;
+            meta++;
+        }
+
+        //detect >>&
+        else if (strcmp(w,appenderrcmd) == 0)
+        {
+            if (appenderrCount == 1)
+            {
+                err = 3;
+                break;
+            }
+
+            appenderrCount++;
+            w = w + word + 1;
+            outfile = w;
+            meta++;
+        }
+
+        else if(*w == '|' && word == 1) //flag pipeline
+        {
+            if (pipeCount > 1)
+            {
+                err = 5;
+                break;
+            }
+            pipeflag = newargvsize;
+            newargv[newargvsize] = '\0';
+            newargvsize++;
+            w = w + word + 1;
+            pipeCount++;
+        }
+
+        else if(*w == '|' && word == -2) //deal with '\|'
+        {
+            word = 1;
+            newargv[newargvsize] = w;
+            if (bangcount == 0)
+            {
+                hist[newargvsize] = strdup(w);
+        
+            }
+            w = w + word + 1;
+            newargvsize++;
+        }
+
+        //check for !! at the beginning of the sentence, flag it, and break out of the loop
+        else if (strcmp(w,bangbang) == 0 && newargvsize == 0)
+        {
+            bangcount++;
+            break;
+        }
+
+        else if (aftercomment == 1)
+        {
+            w = w + word + 1;
+        }
+     
+        else if (*w == '#' && commentflag == 1)
+        {
+            newargv[newargvsize] = '\0';
+            newargvsize++;
+            commentflag = 0;
+            aftercomment = 1;
+        }
+
+        else if (*w == '#' && cmdline == 1 && commentflag == 0)
+        {
+            commentflag = 1;
+            newargv[newargvsize] = w;
+            if (bangcount == 0)
+            {
+                hist[newargvsize] = strdup(w);
+        
+            }
+            w = w + word + 1;
+            newargvsize++;      
+        }
+
+        //check for the & meta, and set flag to check for backgrounding process in next if statement
+        else if (*w == '&' && word == 1)
+        {
+            if (amp == 2)
+            {
+                err = 4;
+                break;
+                newargvsize++;
+            }
+
+            amp++;
+            newargv[newargvsize] = w;
+            if (bangcount == 0)
+            {
+                hist[newargvsize] = strdup(w);
+        
+            }
+            w = w + word + 1;
+            newargvsize++;
+            
+        }
+    
+        //if the amp flag is set and getword returns anything less than or equal to 0 then that means & was encountered at the end of the line, so set the backgrounding flag
+        else if (amp == 1 && word <= 0)
+        {
+            background++;
+            break;
+        }
+
+        //skip pushing the metacharacter into newargv and just increment the w pointer
+        else if (meta == 1)
+        {
+            w = w + word + 1;
+            meta = 0;
+        }
+    
+        //checks if done is encountered at the beginning of the line, if so break out of the loop and set the flag
+        else if (strcmp(w,done) == 0 && newargvsize == 0)
+        {
+            donecount++;
+            break;
+        }   
+    
+        //if done is not encountered at the beginning, then set the length to 4 and push the word into newargv
+        else if (strcmp(w,done) == 0 && newargvsize != 0)
+        {
+            word = 4;
+            newargv[newargvsize] = w;
+            if (bangcount == 0)
+            {
+                hist[newargvsize] = strdup(w);
+        
+            }
+            w = w + word + 1;
+            newargvsize++;   
+        }
+
+        //If an EOF is encountered with 0 arguments, then set the flag
+        else if (word == -1 && newargvsize == 0)
+        {
+            eofcount++;
+            break;
+        }
+
+        //push the word into newargv and move the pointer over accordingly
+        else
+        {
+            newargv[newargvsize] = w;
+            if (bangcount == 0)
+            {
+                hist[newargvsize] = strdup(w);
+        
+            }
+            w = w + word + 1;
+            newargvsize++;
+            amp = 0;
+        }
+        
+        //if EOF is encountered but there are commands, then set length to 1 and break
+
+        if (word == -1 && newargvsize != 0)
+        {
+            word = 1;
+            break;
+        }
+        //break out of loop when getword returns anything less than or equal to 0
+        if (word <= 0 && donecount == 0 && eofcount == 0)
+        {
+            break;
+        }
+
+
+    } //end loop
+
+    //null terminate the last word in newargv and return length to main
+    
+    newargv[newargvsize - 1] = '\0';  
+    return word;
+   
+
+}

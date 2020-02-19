@@ -1,0 +1,69 @@
+/**********************************************************************************************
+Megan Chua cssc0025
+p2.h: Serves as the header file to p2. Defines my global variables and functions.
+***********************************************************************************************/
+
+/*****************************
+Define all include statements
+******************************/
+#include "getword.h"
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <limits.h>
+#include <time.h>
+#include <semaphore.h>
+#include <assert.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <errno.h>
+
+#define MAXITEM 100 //defines the maximum words per line
+#define MAXSIZE 25500 //defines a buffer size large enough to store 255 words with 255 chars
+
+/**************************************************
+Define global variables.
+***************************************************/
+//pointer to each command and argument, newargv[0] holds exec command and the rest holds the args
+char *newargv[MAXITEM];  
+int newargvsize = 0; //counter for the number of commands and arguments
+char *hist[MAXITEM]; //holds the previous command to execute when encountering !!
+char *outfile = NULL; //pointer for output redirection (>)
+char *infile = NULL; //pointer for input redirection (<)
+char *outerrcmd = ">&"; //variable used to strcmp to >& and flag it
+char *appendcmd = ">>";
+char *appenderrcmd = ">>&";
+int pipeflag = 0; //pipe array
+int commentflag = 0;
+int aftercomment = 0;
+int amp = 0; //flag for & metacharacter
+int background = 0; //flag to detect if the process needs to be backgrounded
+int noprompt = 0; //flag when the prompt does not need to be called
+int promptcount = 0;
+int donecount = 0; //flag to detect the "done" terminator
+int eofcount = 0; //flag to detect the "eof" terminator
+char *bangbang = "!!"; //variable used to strcmp to "!!"
+int bangcount = 0; //flag to detect !! metacharacter
+int word, inCount, outCount, outerrCount, appendCount, appenderrCount, pipeCount, fileIn, fileOut, fileErr, err, ;
+//the rest of the variables are explained in p2.c
+
+/******************************************************************************************
+void sig: Signal Handler that catches SIGTERM on termination
+********************************************************************************************/
+void sig (int signum);
+
+/******************************************************************************************
+void prompt: Prints out the prompt statement "%1%" whenever called
+********************************************************************************************/
+void prompt();
+
+/************************************************************************************************
+int parse: Calls my getword function in order to parse the input at stdin. Parse creates flags for each metacharacter, keeps track of what getword returns with (length), and pushes each word into newargv.
+************************************************************************************************/
+int parse ();

@@ -1,0 +1,444 @@
+/*
+    Kosuke Takahashi
+    Carroll
+    CS570
+    cssc0097
+    REDID: 820144293
+    October 9th, 2019
+    p2.h
+*/
+
+#ifndef PROGRAM2_P2_H
+#define PROGRAM2_P2_H
+
+#include "getword.h"
+#include "p2.h"
+
+#include <unistd.h>     //dup2, execvp, chdir, fork, access, setpgid, getpgrp
+#include <stdlib.h>     //getenv, exit
+#include <fcntl.h>      //open
+#include <stdio.h>      //perror, fflush
+#include <sys/wait.h>   //wait
+#include <sys/stat.h>   //stat
+#include <signal.h>     //sigaction, killpg, signal
+#include <dirent.h>
+#include <stdbool.h>
+#include <zconf.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>      //check if file direcotry exists
+
+#define MAXITEM 100
+#define MAXSIZE 25500 
+
+#ifndef QUOTE_MISMATCH
+#define QUOTE_MISMATCH      -3
+#endif
+
+pid_t pidChild;
+int backgroundIndicator;
+int bangbang = 0;
+char *outputFile = NULL;
+char *inputFile = NULL;
+char *outampFile = NULL;
+char *newArgv[MAXITEM];
+char *bangArgv[MAXITEM];
+char line[MAXSIZE];
+int newArgvSize = 0;
+int printp = 1;
+int filepoint = 0;
+
+/*
+
+*/
+int parse(char** commandLine, char* line);
+
+/*
+
+*/
+void clear();
+
+/*
+
+*/
+void execute(char *command, char**args);
+
+/*
+
+*/
+void handler();
+
+
+/////////////////////////////////////////////////////////
+
+
+/*
+    Kosuke Takahashi
+    Carroll
+    CS570
+    cssc0097
+    REDID: 820144293
+    October 9th, 2019
+    p2.c
+*/
+
+#include "p2.h"
+
+int main(int argc, char* argv[])
+{
+    setpgid(0,getpid());
+    signal(SIGTERM, handler);
+    //int filepoint = 0;
+
+    if(argc > 0)
+    {
+        if((filepoint = open(argv[1], O_RDONLY)) != -1)
+        {
+            dup2(filepoint, STDIN_FILENO);
+            close(filepoint);
+        }
+    }
+
+    //char *newArgv[MAXITEM];
+    //char line[MAXSIZE];
+    while(1)
+    {
+        if(printp == 0)
+            printf("%%1%% ");
+        else
+            printp = 0;
+        newArgvSize = parse(newArgv, line);
+        //printf("PARSING COMPLETE\n");
+
+        if(bangbang == 1)
+        {
+            int i = 0;
+            while(i <= newArgvSize)
+            {
+                newArgv[i] = bangArgv[i];
+                i++;
+            }
+            //printf("BANGBANG: %s\n", *bangArgv);
+        }
+        if(newArgvSize == EOF)
+        {
+            //printf("EOF REACHED\n");
+            break;
+        }
+        else if(newArgvSize == 0)
+        {
+            //printf("EMPTY ARGV\n");
+            fflush(stdout);
+            break;
+        }
+        else if(newArgvSize < 0)
+        {
+            fflush(stdout);
+            //printf("ARGUMENT TOO SMALL\n");
+            fprintf(stderr, "-p2: argument size too small\n");
+            printp = 1;
+            fflush(stderr);
+            continue;
+        }
+
+        if(strcmp(newArgv[0], "cd") == 0)
+        {
+            printf("CD\n");
+            if(newArgvSize == 1)
+            {
+                //if((chdir(getenv("HOME"))) == -1)
+                if(!chdir(getenv("HOME")))
+                {
+                    perror("-p2: directory not found\n");
+                    printp = 1;
+                    continue;
+                }
+                continue;
+            }
+            if(newArgvSize >= 2)
+            {
+                if(newArgvSize >= 4)
+                {
+                    fprintf(stderr, "-p2: invalid number of argument\n");
+                    printp = 1;
+                    continue;
+                }
+                //if(chdir(newArgv[1]) == -1)
+                if(!chdir(getenv(newArgv[1])))
+                {
+                    perror("-p2: directory not found\n");
+                    printp = 1;
+                    continue;
+                }
+                continue;
+            }
+            clear();
+        }
+        if(strcmp(newArgv[0], "!!") == 0)
+        {
+            printf("BANG BANG\n");
+        }
+
+        execute(newArgv[0], newArgv);
+        clear();
+
+        if(backgroundIndicator != 1)
+        {
+            while (wait(NULL) != pidChild);
+            //printf("-p2 terminated\n");
+            //break;
+        }
+        if(backgroundIndicator == 1)
+        {
+            printf("%s [%d]\n", newArgv[0], pidChild);
+            backgroundIndicator = -1;
+        } 
+        /*
+        else
+        {
+            //printf("EXECUTE THIS SHIT\n");
+            execute(newArgv[0], newArgv);
+            clear();
+        }
+        */
+    }
+    killpg(getpgrp(), SIGTERM);
+    printf("p2 terminated\n");
+    return 0;
+}
+
+
+void clear()
+{
+    if(inputFile != NULL)
+        inputFile = NULL;
+    if(outputFile != NULL)
+        outputFile = NULL;
+    if(backgroundIndicator)
+        backgroundIndicator = 0;       
+}
+
+void handler(int signum)
+{
+}
+
+/*
+*/
+void execute(char *command, char**args)
+{
+    //pid_t pidChild;
+    //int waiting;
+    int fileIndicator = 0;  //for redirection
+    
+    //printf("ENTERING EXECUTE STAGE\n");
+    fflush(stdout);
+    fflush(stderr);
+    if((pidChild = fork()) == -1)
+    {
+        //printf("FORKING FAILED IN EXECUTION\n");
+        //fprintf(stderr, "-p2: fork process failed\n");
+        perror("-p2: fork process failed\n");
+        //printp = 1;
+        return;
+    }
+    else if(pidChild == 0)
+    {
+        //printf("EXECUTING CHILD\n");
+        //executeChild(command, args);
+        if(outampFile != NULL)
+        {
+            if ((fileIndicator = open(outputFile, O_CREAT | O_EXCL | O_WRONLY | S_IRUSR | S_IWUSR)) < 0)
+            {
+                perror("-p2: could not open outputfile\n");
+                exit(-1);
+            }
+            if((dup2(fileIndicator, STDOUT_FILENO)) < 0 || (dup2(fileIndicator, STDERR_FILENO)) < 0)
+            {
+                perror("-p2: output redirection failed\n");
+                exit(-1);
+            }
+            close(fileIndicator);
+        }
+        if(outputFile != NULL)
+        {
+            if((fileIndicator = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC | S_IRUSR | S_IWUSR)) < 0)
+            {
+                perror("-p2: could not open output file\n");
+                exit(-1);
+            }
+            if((dup2(fileIndicator, STDOUT_FILENO)) < 0)
+            {
+                perror("-p2: output redirection failed\n");
+                exit(-1);
+            }
+            close(fileIndicator);
+
+        }
+        if(inputFile != NULL)
+        {
+            fileIndicator = open(inputFile, O_RDONLY);
+            if(fileIndicator < 0)
+            {
+                perror("-p2: could not open input file\n");
+                exit(-1);
+            }
+            if((dup2(fileIndicator, STDIN_FILENO)) < 1)
+            {
+                perror("-p2: input redirection failed\n");
+                exit(-1);
+            }
+            close(fileIndicator);
+        }
+        if(inputFile == NULL && backgroundIndicator)
+        {
+            fileIndicator = open("/dev/null", O_RDONLY);
+            if(fileIndicator < 0)
+            {
+                perror("-p2: could not open input file\n");
+                exit(-1);
+            }
+            if((dup2(fileIndicator, STDIN_FILENO)) < 0)
+            {
+                perror("-p2: input redirection failed\n");
+                exit(-1);
+            }
+            close(fileIndicator);
+        }
+        execvp(command, args);
+        fprintf(stderr, "-p2: {%s}: command not found\n", args[0]);
+        exit(-1);
+    }
+    /*
+    else
+    {
+        if(!backgroundIndicator)
+        {
+            do
+            {
+                //printf("WAITING\n");
+                waiting = wait(NULL);
+            } while (waiting != pidChild);
+        }
+        if(backgroundIndicator == 1)
+        {
+            printf("%s [%d]\n", command, pidChild);
+            backgroundIndicator = -1;
+        }   
+    }
+    */
+}
+
+/*
+*/
+int parse(char** commandLine, char* line)
+{
+    int count = 0;
+    int size = 0;
+    int outputRedir = 0;
+    int inputRedir = 0;
+    int outampRedir = 0;
+
+    do
+    {
+        //printf("Welcome to parser loop\n");
+        size = getword(line);
+        if(size > 0)
+        {
+            //printf("SIZE: %d\n", size);
+            //printf("LINE: %s\n", line);
+            if(strcmp(line, "&") == 0)
+            {
+                //printf("& PARSING\n");
+                backgroundIndicator = 1;
+                //newArgv[newArgvSize] = line;
+                *commandLine++ = line;
+                line += size + 1;
+                //newArgvSize++;
+                //break;
+            }
+            else if(strcmp(line, ">") == 0)
+            {
+                //printf("> PARSING\n");
+                if(outputRedir)
+                {
+                    //printf("OUTPUT REDIRECTION PARSING\n");
+                    break;
+                }
+                outputRedir = 1;
+                line += size + 1;
+                outputFile = line;
+            }
+            else if(strcmp(line, "<") == 0)
+            {
+                //printf("< PARSING");
+                if(inputRedir)
+                {
+                    //printf("INPUT REDIRECTION PARSING\n");
+                    break;
+                }
+                inputRedir = 1;
+                line += size + 1;
+                inputFile = line;
+            }
+            else if(strcmp(line, ">&") == 0)
+            { 
+                if(outampRedir)
+                {
+                    break;
+                }
+                outampRedir = 1;
+                line += size + 1;
+                outampFile = line;
+            }
+            else if(strcmp(line, "done") == 0)
+            {
+                printf("DONE CASE\n");
+                if(newArgvSize == 0)
+                {
+                    break;
+                }
+                else
+                {
+                    size = 4;
+                    newArgv[newArgvSize] = line;
+                    line += size + 1;
+                    newArgvSize++; 
+                }
+            }
+            else if(strcmp(line, "!!") == 0 && newArgvSize == 0)
+            {
+                bangbang = 1;
+                break;
+            }
+            else if(outputRedir && outputFile == NULL)
+            {
+                //printf("OUTPUTREDIR IS 1 AND OUTPUT FILE IS NULL\n");
+                outputFile = line;
+                line += size + 1;
+            }
+            else if(inputRedir && inputFile == NULL)
+            {
+                //printf("INPUTREDIR IS 1 AND INPUT FILE IS NULL\n");
+                inputFile = line;
+                line += size + 1;
+            }
+            else
+            {
+                //printf("MOVE ON: %s\n", line);
+                count++;
+                *commandLine++ = line;
+                newArgvSize++;
+                line += size + 1;
+            }
+        }
+    } while(size != EOF && size != 0);
+
+    if((backgroundIndicator && count == 0) || (outputRedir && outputFile == NULL) ||
+    (inputRedir && inputFile == NULL) || (inputFile != NULL && count == 0) ||
+    (outputFile != NULL && count == 0))
+    {
+        return -1;
+    }
+    //printf("EXITING PARSER\n");
+    *commandLine = NULL;
+    return count;

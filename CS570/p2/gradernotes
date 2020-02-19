@@ -1,0 +1,38 @@
+Kosuke Takahashi
+Carroll
+CS570
+cssc0097
+REDID: 820144293
+November 29th, 2019
+gradernotes
+
+I wrote this code myself while using my getword.c program for Program 1.
+Since I am using getword.c from my previous Program 1, I had the assistance of Foster.
+I also used the following links below:
+http://man7.org/linux/man-pages/man2/exit.2.html
+    I used this to learn why _exit() was needed when dealing with child pid
+https://pubs.opengroup.org/onlinepubs/7908799/xsh/open.html
+https://www.gnu.org/software/libc/manual/html_node/Permission-Bits.html
+    I used these two to learn about specific symbols constants to use when dealing with redirection
+https://www.geeksforgeeks.org/c-program-demonstrate-fork-and-pipe/
+    I used this to explain how pipe() and fork() works when it comes to dealing with child pid
+
+Potential bugs and shortcomings:
+When I run 'make splint' there are 3 code warnings, they do not seem to affect running the code. But there are still warnings
+Not all foreground/background input/output redirection works properly
+The only history that I got to function properly was the !! so it does not obey all rules
+    p4 does not handle appending with history and pipes due to my history limitations
+My shell did not process subsequent valid commands for a few inputs
+p4 is not optimized to handle badly-constructed commands all the time
+p4 has issues redirecting standard input/output in certain situations and command lines so it does not obey all rules
+On a few of the outputs, there were some unwanted %n% that were printed
+
+Extra Comments:
+When the command "echo hi > a >> b" is run in the command line argument, p4 prints out the following errors:
+    "p2: invalid syntax"
+    "p2: redirection error, not enough arguments"
+    "p2: failed to open output file"
+    ": Bad address"
+    "%1% p2 terminated."
+All the children and grandchildren that were created die reliably and the background zombies are reaped as well
+getword() had to be changed to deal with comments and piping (more on the top of getword.c)

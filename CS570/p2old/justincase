@@ -1,0 +1,417 @@
+/*
+    Kosuke Takahashi
+    Carroll
+    CS570
+    cssc0097
+    REDID: 820144293
+    October 9th, 2019
+    p2.c
+*/
+
+#include "p2.h"
+
+int main()
+{
+    int exiting;
+    setpgrp();
+    signal(SIGTERM, handler);
+    //char *newArgv[MAXITEM];
+    char line[MAXSIZE];
+    while(1)
+    {
+        if(printp == 0)
+            printf("%%1%% ");
+        else
+            printp = 0;
+        newArgvSize = parse(newArgv, line);
+        //printf("PARSING COMPLETE\n");
+        if(newArgvSize == EOF)
+        {
+            //printf("EOF REACHED\n");
+            break;
+        }
+        else if(newArgvSize == 0)
+        {
+            //printf("EMPTY ARGV\n");
+            fflush(stdout);
+            break;
+        }
+        else if(newArgvSize < 0)
+        {
+            fflush(stdout);
+            //printf("ARGUMENT TOO SMALL\n");
+            fprintf(stderr, "-p2: argument size too small\n");
+            printp = 1;
+            fflush(stderr);
+            continue;
+        }
+
+        if(strcmp(newArgv[0], "cd") == 0)
+        {
+            if(newArgvSize == 1)
+            {
+                if((chdir("HOME")) == -1)
+                {
+                    perror("-p2: directory not found\n");
+                    printp = 1;
+                    continue;
+                }
+                continue;
+            }
+            if(newArgvSize >= 2)
+            {
+                if(newArgvSize >= 4)
+                {
+                    fprintf(stderr, "-p2: invalid number of argument\n");
+                    printp = 1;
+                    continue;
+                }
+                if(chdir(newArgv[1]) == -1)
+                {
+                    perror("-p2: directory not found\n");
+                    printp = 1;
+                    continue;
+                }
+                continue;
+            }
+            clear();
+        }
+        /*
+        else if(strcmp(newArgv[0], "ls-F") == 0)
+        {
+            //printf("LS-F CASE MET\n");
+            if(newArgvSize == 1)
+            {
+                if((exiting = executelsf(".")) < 1)
+                {
+                    fprintf(stderr, "-p2: %s: could not execute code\n", ".");
+                    printp = 1;
+                    break;
+                }
+                else
+                {
+                    clear();
+                }
+            }
+            else if(newArgvSize >= 2)
+            {
+                if((exiting = executelsf(newArgv[1])) < 1)
+                {
+                    fprintf(stderr, "-p2: %s: could not execute code\n", newArgv[1]);
+                    printp = 1;
+                }
+                else
+                {
+                    clear();
+                }
+            }
+        }
+        */
+        else if(strcmp(newArgv[0], "!!") == 0)
+        {
+            printf("BANG BANG\n");
+        }
+        else
+        {
+            //printf("EXECUTE THIS SHIT\n");
+            execute(newArgv[0], newArgv);
+            clear();
+        }
+    }
+    killpg(getpgrp(), SIGTERM);
+    printf("-p2 terminated\n");
+    return 0;
+}
+
+
+void clear()
+{
+    if(inputFile != NULL)
+        inputFile = NULL;
+    if(outputFile != NULL)
+        outputFile = NULL;
+    if(backgroundIndicator)
+        backgroundIndicator = 0;       
+}
+
+void handler(int signum)
+{
+}
+
+/*
+*/
+int redirection()
+{
+    int fileIndicator = 0;
+    if(outputFile != NULL)
+    {
+        if(access(outputFile, F_OK) == 0)
+        {
+            //printf("FILE EXISTS\n");
+            return -1;
+        }
+        fileIndicator = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC | S_IRUSR | S_IWUSR);
+        if(fileIndicator < 0)
+        {
+            fprintf(stderr, "-p2: {%s}: could not open output file\n", outputFile);
+            printp = 1;
+            exit(-1);
+        }
+        if(dup2(fileIndicator, STDOUT_FILENO) < 0)
+        {
+            fprintf(stderr, "-p2: output redirection failed\n");
+            printp = 1;
+            exit(-1);
+        }
+        close(fileIndicator);
+    }
+    if(inputFile != NULL)
+    {
+        fileIndicator = open(inputFile, O_RDONLY);
+        if(fileIndicator < 0)
+        {
+            fprintf(stderr, "-p2: could not open input file\n", NULL);
+            printp = 1;
+            exit(-1);
+        }
+        if(dup2(fileIndicator, STDIN_FILENO) < 1)
+        {
+            fprintf(stderr, "-p2: input redirection failed\n");
+            printp = 1;
+            exit(-1);
+        }
+        close(fileIndicator);
+    }
+    if(inputFile == NULL && backgroundIndicator)
+    {
+        fileIndicator = open("/dev/null", O_RDONLY);
+        if(fileIndicator < 0)
+        {
+            fprintf(stderr, "-p2: could not open input file\n");
+            printp = 1;
+            exit(-1);
+        }
+        if(dup2(fileIndicator, STDIN_FILENO) < 0)
+        {
+            fprintf(stderr, "-p2: input redirection failed\n");
+            printp = 1;
+            exit(-1);
+        }
+        close(fileIndicator);
+    }
+    return fileIndicator;
+}
+
+/*
+*/
+void execute(char *command, char**args)
+{
+    pid_t pidChild;
+    int waiting;
+    int redirectionOutput;  //for pidChild
+    
+    //printf("ENTERING EXECUTE STAGE\n");
+    fflush(stdout);
+    fflush(stderr);
+    if((pidChild = fork()) == -1)
+    {
+        //printf("FORKING FAILED IN EXECUTION\n");
+        fprintf(stderr, "-p2: fork process failed\n");
+        printp = 1;
+        return;
+    }
+    else if(pidChild == 0)
+    {
+        //printf("EXECUTING CHILD\n");
+        //executeChild(command, args);
+        if((redirectionOutput = redirection()) < -1)
+        {
+            fprintf(stderr, "-p2: redirection error\n");
+            printp = 1;
+            exit(-1);
+        }
+        else
+        {
+            if(execvp(command, args) == -1)
+            {
+                fprintf(stderr, "-p2: {%s}: command not found\n", args[0]);
+                printp = 1;
+                exit(-1);
+            }
+        }
+    }
+    else
+    {
+        if(!backgroundIndicator)
+        {
+            do
+            {
+                //printf("WAITING\n");
+                waiting = wait(NULL);
+            } while (waiting != pidChild);
+        }
+        else
+        {
+            printf("%s [%d}\n", command, pidChild);
+            backgroundIndicator = -1;
+        }   
+    }
+}
+
+/*
+
+int executelsf(char *path)
+{
+    DIR *dirPointer = opendir(path);
+    struct dirent *dirStream;
+    struct stat dirInfo;
+
+    if(ENOENT == errno)
+    {
+        //printf("PATH NO EXISTO\n");
+        return -1;
+    }
+    if(stat(path, &dirInfo) != 1)
+    {
+        //printf("CANNOT ACCESS PATH\n");
+        return -1;
+    }
+    if(S_ISREG(dirInfo.st_mode) != 0)
+    {
+        //printf("PATH DOES NOT POINT TO A DIR\n");
+        return 0;
+    }
+
+    if(access(path, R_OK) != 0)
+    {
+        //printf("UNREADABLE FILE\n");
+        return -1; 
+    }
+    else
+    {
+        if((dirPointer = opendir(path)) == NULL)
+        {
+            //printf("CANNOT OPEN DIR\n");
+            return -1;
+        }
+        while(dirPointer)
+        {
+            if((dirStream = readdir(dirPointer)) != NULL)
+            {
+                printf("\n%s", dirStream->d_name);
+            }
+            else
+            {
+                printf("\n");
+                closedir(dirPointer);
+                break;
+            }
+            
+        }
+    }
+    return 0;
+}
+*/
+/*
+
+*/
+int parse(char** commandLine, char* line)
+{
+    int count = 0;
+    int size = 0;
+    int outputRedir = 0;
+    int inputRedir = 0;
+    int ambiguousInputRedir = 0;
+    int ambiguourOutputRedir = 0;
+
+    do
+    {
+        if((size = getword(line)) > 0)
+        {
+            //printf("SIZE: %d\n", size);
+            //printf("LINE: %s\n", line);
+            if(strcmp(line, "&") == 0)
+            {
+                //printf("& PARSING\n");
+                backgroundIndicator = 1;
+                break;
+            }
+            else if(strcmp(line, ">") == 0)
+            {
+                //printf("> PARSING\n");
+                if(outputRedir)
+                {
+                    //printf("OUTPUT REDIRECTION PARSING\n");
+                    ambiguourOutputRedir = 1;
+                }
+                outputRedir = 1;
+            }
+            else if(strcmp(line, "<") == 0)
+            {
+                //printf("< PARSING");
+                if(inputRedir)
+                {
+                    //printf("INPUT REDIRECTION PARSING\n");
+                    ambiguousInputRedir = 1;
+                }
+                inputRedir = 1;
+            }
+            else if(strcmp(line, "done") == 0)
+            {
+                if(newArgvSize == 0)
+                    break;
+                else
+                {
+                    size = 4;
+                    newArgv[newArgvSize] = line;
+                    line = line + size + 1;
+                    newArgvSize++; 
+                }
+            }
+            else if(outputRedir && outputFile == NULL)
+            {
+                //printf("OUTPUTREDIR IS 1 AND OUTPUT FILE IS NULL\n");
+                outputFile = line;
+                line += size + 1;
+            }
+            else if(inputRedir && inputFile == NULL)
+            {
+                //printf("INPUTREDIR IS 1 AND INPUT FILE IS NULL\n");
+                inputFile = line;
+                line += size + 1;
+            }
+            else
+            {
+                //printf("MOVE ON: %s\n", line);
+                count++;
+                *commandLine++ = line;
+                line += size + 1;
+            }
+        }
+        if(size == QUOTE_MISMATCH)
+        {
+            //printf("QUOTE MISMATCH MET\n");
+            return QUOTE_MISMATCH;
+        }
+    } while(size != EOF && size != 0);
+
+    if(ambiguousInputRedir)
+    {
+        return ambiguourOutputRedir;
+    }
+    if(ambiguourOutputRedir)
+    {
+        return ambiguousInputRedir;
+    }
+    if((backgroundIndicator && count == 0) ||
+    (outputRedir && outputFile == NULL) ||
+    (inputRedir && inputFile == NULL) ||
+    (inputFile != NULL && count == 0) ||
+    (outputFile != NULL && count == 0))
+    {
+        return -1;
+    }
+    //printf("EXITING PARSER\n");
+    *commandLine = NULL;
+    return count;
+}

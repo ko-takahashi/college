@@ -1,0 +1,2 @@
+/usr/bin/uname: illegal option -- d
+usage: uname [-amnprsv]

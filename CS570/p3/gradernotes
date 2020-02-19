@@ -1,0 +1,39 @@
+Kosuke Takahashi
+Carroll
+cssc0097
+gradernotes
+
+I wrote this code myself with the help of semex.c in the directory ~cs570/ on edoras.
+
+Potential Bugs and Shortcomings:
+
+Extra Comments:
+Solution Strategy:
+To solve p3, I went a multitude of routes. Simply, to just print the triangle that we are looking for, one can use a nested for loop.
+This code does not use that as the for loops that are used are only used to set the count variable.
+I initialized these variables using CHK as these values for the following variables are passed between process:
+    count | countfile: This holds the number of robots that have places a widget so far in the process
+    row | rowfile: This hold the current line number that the robots are on
+    dec | decfile: This hold the n that is used to solve the decrementing line size
+    loop | loopfile: This is a count for how many times count is equal to the line size when the triangle is decrementing. This is used to calculate the proper decrementing count value.
+    (each of these variables are read to their own files)
+To begin with, I attempted to figure out how to have the robots place their widgets in a right triangle shape.
+Using that strategy, I believed that I could edit the right triangle strategy to find the max row needed to begin decrememnting to create the proper triangle needed for p3.
+When the triangle increments:
+    I subtract count by the index until it reaches the value of row, until that point, the robot just uses printeger(n).
+    But once the count is equal to the current row, the robots have placed the max amount of widgets in the row so the code goes to a new line and starts again.
+When the triangle reaches its max_row: 
+    When the triangle reaches its max_row, it acts similarly to when the triangle increments, but it also does more.
+    Since max_row is reached, a flag is needed to indicate that the triangle will begin decrementing once count is equal to max_row.
+When the triangle decrements:
+    A new row variable is used to help keep track of the triangle since it is decrementing. Row continues to increment no matter if the triangle is incrementing or decrementing.
+    To calculate the count of the decrementing triangle, I came up with a formula that adds count to the index n times. After that count is simply subtracted by index.
+    For this formula, it allows the code to be similar to the incrementing triangle code since now it is checked if count is equal to the new row variable.
+    If it is not, the robot uses printeger(n) and moves on.
+
+Cleanup Strategy:
+Once all the robots printed their quota of widgets, the last robot prints "F" and closes up shop.
+Once that is over, there is a clean up process that cleans up all the files and semaphores used>
+First, I removed each file that was used.
+Next, I close and remove the semaphore that was use which frees all the resources that was used for the semaphore
+Lastly, I close each file descriptor that was connected to each semaphore that I used.
