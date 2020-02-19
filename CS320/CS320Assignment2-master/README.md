@@ -1,0 +1,13 @@
+Bryan Phan
+bryan.th.phan@gmail.com
+
+The project was to exercise our knowledge of the C++ language, tokenizers, and parsers.
+
+The first program (prog2_1) was written in C++ and was a Tokenizer class that consisted of a header(prog2_1.hpp) and class (prog2_1.cpp) file. The class had four public methods: the constructor, the deconstructor, a void function that took in string input for only (push, pop, add, sub, mul, div, mod, skip, save, get, and any valid integer), and a vector<string> function named GetTokens that will retrieve a single set of input tokens in a queue fashion. If a invalid integer, such as foobar, was read by the void function, it will throw an "Unexpected token: <invalid token>". The first invalid token is thrown. If there are no tokens added to the vector, when GetTokens will throw "No tokens." This Tokenizer class will be used by prog2_2.
+
+The second program (prog2_2) was written in C++ and was a driver program that will take a single command line argument which will be the name of a file. The program tokenized each line of the file and if there is any bad input it will print "Error on line <#>: Unexpected token: <value>" and end the program. If there were no tokenization errors, the tokens were printed to STDOUT comma separated line by line. To compile this driver class, we do g++ prog2_2.cpp prog2_1.cpp -o prog2_2. An example execution was ./prog2_2 testfile.txt 
+
+The third program (prog2_3) was written in C++ and was a Parser class that consisted of a header (prog2_3.hpp) and class (prog2_3.cpp) file. The class had three public methods: the constructor, the deconstructor, and a boolean function Parse that took a single vector<string> argument. The parse function adhered to specific rules. If an input was valid, it would return true, and if it was invalid, false. The rules for the parse function was for pop,add,sub,mul,div,mod,skip to appear by themselves on a single line and for push, save, get to appear on a single line of two tokens, but the token after them being an integer. 
+
+The fourth program (prog2_3) was written in C++ and was a driver that tokenized all of the input lines and then parsed all of the input lines. All of the input read from a file wastokenized first, before any parsing occurred. If there was a tokenization error, the driver printed a tokenization error like that in prog2_2. If there was a parsing error, the driver printed a parsing error "Parse error line <#>: <line>". If any of the two errors occurred, the program stopped executing. In order to compile this program, you do g++ prog2_4.cpp prog2_3.cpp prog2_1.cpp -o prog2_4. And like program 2, the execution is just ./prog2_2 testfile.txt
+

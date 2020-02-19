@@ -1,0 +1,10 @@
+Bryan Phan
+bryan.th.phan@gmail.com
+
+This project was to help familiarize us with Python programming and virtual machine 
+
+The first part of the program (prog4_1.py) was written in Python and implemented the Tokenize(str) and Parse(tokens) function. The tokenize function takes in an input string and tokenizes it according to the same rules in assignment#2. We do not have to store the tokenized string, but return true. For the parse function it takes a list of tokens as input that have previously been parsed by the Tokenize Function. If there are any mistakes a raise ValueError will occur. 
+
+The second part of the program (prog4_2.py) was written in Python and implemented a StackMachine.class. This class had both the Execute(tokens) public function and the currentLine property(initial value zero). The Execute(tokens) function should accept a list of tokens that has been previously Tokenized and Parsed correctly. The function will then perform the operation defined in the list of tokens as specified by the operation. These operations include push #, pop, add, sub, mul, div, mod, skip, save #, get #. Whenever the Execute(tokens) function finishes executing the operation specified by the tokens, the property currentLine is incremented by 1. If, at any time, the program attempts to pop a value that doesn't exist or get a value that has not previously been saved, it raises an IndexError with the message "Invalid Memory Access". 
+
+The final part of the program (prog4_3.py) was written in Python and implemented a driver program. It imports both prog4_1.py and prog4_2.py. The first command line argument is read as a file, which the program then proceeds to tokenize and parse all of the lines of the file. After that the lines are stored in an indexable structure so that we can randomly get the tokens for any line by line number. It then instantiates a StackMachine class and execute each operation one line at a time. When the StackMachine stopsrunning naturally, then program will print "Program terminated correctly." 
